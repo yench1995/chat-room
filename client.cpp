@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include "strtool.h"
 
 #define MAX_LINE_LEN 4096
 #define __DEBUG__ 0
@@ -19,7 +20,6 @@
 }while(0)
 
 using namespace std;
-bool send_is_over = false;
 
 void *recv(void *arg)
 {
@@ -29,14 +29,13 @@ void *recv(void *arg)
     vector<char *> list;
     while (true)
     {
-        if (send_is_over)
-            break;
-        if ((n = recv(sockfd,recv_line, MAX_LINE_LEN, 0)) < 0)
+        if ((n = recv(sockfd,recv_line, MAX_LINE_LEN, 0)) <= 0)
         {
             fprintf(stderr, "recieve from server failed!\n");
             break;
         }
         recv_line[n] = 0;
+        DEBUG("recvlne:%s\n", recv_line);
         split(list, recv_line, 30);
         for (int i = 0; i < list.size(); ++i)
         {
@@ -62,13 +61,12 @@ void *send(void *arg)
         if (strcmp(sendline, "quit") == 0)
             break;
 
-        if (send(sockfd, sendline, strlen(sendline), 0))
+        if (send(sockfd, sendline, strlen(sendline), 0) < 0)
         {
             printf("send msg error: %s(errno: %d)\n", strerror(errno), errno);
             break;
         }
     }
-    send_is_over = true;
 }
 
 int initSock(char *ip, int port)
@@ -110,9 +108,8 @@ int main(int argc, char **argv)
     DEBUG("initSock finished ! sockfd[%d]\n", sockfd);
     pthread_t thread_recv, thread_send;
     pthread_create(&thread_recv, NULL, recv, &sockfd);
-    pthread_create(&thread_send, NULL, recv, &sockfd);
+    pthread_create(&thread_send, NULL, send, &sockfd);
     pthread_join(thread_send, NULL);
-    pthread_join(thread_recv, NULL);
     close(sockfd);
     return 0;
 }

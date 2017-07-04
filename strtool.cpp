@@ -5,10 +5,10 @@ using namespace std;
 char *r_strip(char* &str)
 {
     if (str == NULL)
-        return nullptr;
+        return NULL;
     char *p = str + strlen(str) - 1;
     char filter_chs[] = "\t\n";
-    while (p >= str && strchr(filter_chs, *p));
+    while (p >= str && strchr(filter_chs, *p))
         *p-- = 0;
     return str;
 }
@@ -20,7 +20,7 @@ char *l_strip(char* &str)
         return NULL;
     char *p = str;
     char filter_chs[] = "\t\n";
-    while (*p && strchr(filter_chs, *p));
+    while (*p && strchr(filter_chs, *p))
         *p++ = 0;
     str = p;
     return str;

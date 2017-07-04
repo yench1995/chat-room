@@ -71,7 +71,7 @@ class ChatServer{
        inline bool isLogged(int connfd)
        {
            unordered_map<int, bool>::iterator iter = m_islogged.find(connfd);
-           return iter == m_islogged.end()? false:true;
+           return iter == m_islogged.end()? false:m_islogged[connfd];
        }
 
        inline void setLogged(int connfd, bool is_logged)
