@@ -11,6 +11,39 @@ int setnoblocking(int sock)
     return 1;
 }
 
+ssize_t readn(int fd, char *vptr, size_t n)
+{
+    int ret = 0;
+    int nread = 0;
+    while ((nread  = read(fd, vptr+ret, n)) > 0)
+        ret += nread;
+    if (nread < 0 && errno != EAGAIN)
+        return (-1);
+    return ret;
+}
+
+ssize_t writen(int fd, const char *vptr, size_t n)
+{
+    size_t nleft;
+    ssize_t nwritten;
+    const char *ptr;
+    nleft = n;
+    ptr = vptr;
+    while (nleft > 0)
+    {
+        if ((nwritten = write(fd, ptr, nleft)) <= 0)
+        {
+            if (nwritten < 0 && errno == EAGAIN)
+                nwritten = 0;
+            else
+            return(-1);
+        }
+        nleft -= nwritten;
+        ptr += nwritten;
+    }
+    return(n);
+}
+
 int ChatServer::hasUser(const string &name)
 {
     return s_users.count(name);
@@ -34,7 +67,6 @@ void ChatServer::removeUser(int connfd, bool is_logged)
         s_users.erase(user_name);
         --cur_user_num;
         DEBUG("remove connfd[%d], user[%s]\n", connfd, m_users[connfd].c_str());
-        DEBUG("new connect, connect num[%d] user num[%d]\n", cur_connect_num, cur_user_num);
     }
 }
 
@@ -51,7 +83,7 @@ void ChatServer::login(char *arg, bool is_logged, int connfd, ChatServer *p_sess
     if (hasUser(arg))
     {
         snprintf(ret_buf, MAX_LINE_LEN, "User[%s] already exits. Please try again.%c%c",arg, 30, 0);
-        send(connfd, ret_buf, strlen(ret_buf), 0);
+        writen(connfd, ret_buf, strlen(ret_buf));
     } else {
         addUser(connfd, arg);
         user_name= arg;
@@ -69,7 +101,7 @@ void ChatServer::broadcase(char *msg, int msg_len)
         return;
     for (unordered_map<int, string>::iterator it = m_users.begin(); it != m_users.end(); ++it)
     {
-        if((ret = send(it->first, msg, msg_len, 0)) < 0)
+        if((ret = writen(it->first, msg, msg_len)) < 0)
             fprintf(stderr, "send message to connfd[%d] failed!\n", it->first);
     }
 }
@@ -83,14 +115,14 @@ void ChatServer::look(char *arg, bool is_logged, int connfd, ChatServer *p_sessi
         snprintf(ret_buf, MAX_LINE_LEN, "You haven't been logged in. Please login using command\"login <name>\" or type \"help\" for help.%c%c", 30, 0);
         int len = strlen(ret_buf);
         DEBUG("ret_buf[%s] len[%d]\n", ret_buf, len);
-        send(connfd, ret_buf, strlen(ret_buf), 0);
+        writen(connfd, ret_buf, strlen(ret_buf));
     } else {
         string str_ret_buf("user list: ");
         char sep[10];
         sprintf(sep, "%c", 30);
         for (auto it = s_users.begin(); it != s_users.end(); ++it)
             str_ret_buf = str_ret_buf + sep + *it;
-        send(connfd, str_ret_buf.c_str(), str_ret_buf.size(), 0);
+        writen(connfd, str_ret_buf.c_str(), str_ret_buf.size());
     }
 }
 
@@ -108,7 +140,7 @@ void ChatServer::say(char *arg, bool is_logged, int connfd, ChatServer *p_sessio
         snprintf(ret_buf, MAX_LINE_LEN, "You haven't been logged in. Please login using command\"login <name>\" or type \"help\" for help.%c%c", 30, 0);
         int len = strlen(ret_buf);
         DEBUG("ret_buf[%s] len[%d]\n", ret_buf, len);
-        send(connfd, ret_buf, strlen(ret_buf), 0);
+        writen(connfd, ret_buf, strlen(ret_buf));
     }
 }
 
@@ -123,7 +155,7 @@ void ChatServer::logout(char *arg, bool is_logged, int connfd, ChatServer *p_ses
         string user = m_users[connfd];
         removeUser(connfd, is_logged);
         snprintf(ret_buf, MAX_LINE_LEN, "[%s] logged out.%c%c", user.c_str(), 30, 0);
-        send(connfd, ret_buf, strlen(ret_buf), 0);
+        writen(connfd, ret_buf, strlen(ret_buf));
         snprintf(ret_buf, MAX_LINE_LEN, "[%s] leaves the room.%c%c", user.c_str(), 30, 0);
         broadcase(ret_buf, strlen(ret_buf));
         setLogged(connfd, false);
@@ -136,7 +168,7 @@ void ChatServer::help(char *arg, bool is_logged, int connfd, ChatServer *p_sessi
     snprintf(ret_buf, MAX_LINE_LEN,
             "supported commands:%c\tlogin <name>%c\tlook%c\tlogout%c\thelp%c\tquit%canything else is to send a message%c%c",
             30,30,30,30,30,30,30,0);
-    send(connfd, ret_buf, strlen(ret_buf), 0);
+    writen(connfd, ret_buf, strlen(ret_buf));
 }
 
 void ChatServer::analyse_cmd(char *buf, char *cmd, char *arg, bool is_logged)
@@ -185,7 +217,7 @@ int ChatServer::eventAccept()
     char *str = inet_ntoa(clientaddr.sin_addr);
     DEBUG("connfd[%d], connect from:%s\n", connfd, str);
     snprintf(ret_buf, MAX_LINE_LEN, "welcone to server!%c%c",30, 0);
-    send(connfd, ret_buf, strlen(ret_buf), 0);
+    writen(connfd, ret_buf, strlen(ret_buf));
     ev.data.fd = connfd;
     ev.events = EPOLLIN | EPOLLET;
     epoll_ctl(epfd, EPOLL_CTL_ADD, connfd, &ev);
@@ -198,7 +230,7 @@ int ChatServer::eventRecv(char *line, struct epoll_event &event)
     int n = 0;
     int connfd = event.data.fd;
     DEBUG("now in recv\n");
-    if ((n = read(connfd, line, MAX_LINE_LEN)) < 0)
+    if ((n = readn(connfd, line, MAX_LINE_LEN)) < 0)
     {
         if (errno == ECONNRESET)
         {
@@ -218,13 +250,15 @@ int ChatServer::eventRecv(char *line, struct epoll_event &event)
         close(connfd);
         epoll_ctl(epfd, EPOLL_CTL_DEL, connfd, &ev);
     }
-
-    line[n] = 0;
-    DEBUG("received: %s\n", line);
-    ev.data.fd = connfd;
-    ev.events = EPOLLOUT | EPOLLET;
-    epoll_ctl(epfd, EPOLL_CTL_MOD, connfd, &ev);
-    return 0;
+    else
+    {
+        line[n] = 0;
+        DEBUG("received: %s\n", line);
+        ev.data.fd = connfd;
+        ev.events = EPOLLOUT | EPOLLET;
+        epoll_ctl(epfd, EPOLL_CTL_MOD, connfd, &ev);
+        return 0;
+    }
 }
 
 int ChatServer::eventSend(char *line, struct epoll_event &event)

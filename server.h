@@ -126,5 +126,7 @@ typedef struct _thread_para_t
 }thread_para_t;
 
 int setnoblock(int);
+ssize_t readn(int, char *, size_t);
+ssize_t writen(int, const char *, size_t);
 #endif
 
