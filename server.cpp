@@ -99,7 +99,7 @@ void ChatServer::broadcase(char *msg, int msg_len)
     int ret = 0;
     if (msg == NULL)
         return;
-    for (unordered_map<int, string>::iterator it = m_users.begin(); it != m_users.end(); ++it)
+    for (unordered_map<int, string>::iterator it = m_users.begin(); it != m_users.end() && m_islogged[it->first]; ++it)
     {
         if((ret = writen(it->first, msg, msg_len)) < 0)
             fprintf(stderr, "send message to connfd[%d] failed!\n", it->first);
